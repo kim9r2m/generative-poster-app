@@ -8,45 +8,28 @@ from matplotlib.patches import Polygon
 import io
 
 # ------------------------------------------
-# 1. Palette Functions
+# 1. Palette Functions (Now More Distinct)
 # ------------------------------------------
 
 def random_palette_pastel(k=5):
-    """Low saturation, high value colors (soft tones)."""
-    palette = []
-    for _ in range(k):
-        hue = random.random()
-        saturation = random.uniform(0.25, 0.45)
-        value = random.uniform(0.85, 1.0)
-        palette.append(colorsys.hsv_to_rgb(hue, saturation, value))
-    return palette
+    """Soft pastel tones: low saturation, high brightness."""
+    return [colorsys.hsv_to_rgb(random.random(), random.uniform(0.2, 0.4), random.uniform(0.9, 1.0)) for _ in range(k)]
 
 def random_palette_vivid(k=5):
-    """High saturation, bright vivid colors."""
-    palette = []
-    for _ in range(k):
-        hue = random.random()
-        saturation = random.uniform(0.8, 1.0)
-        value = random.uniform(0.9, 1.0)
-        palette.append(colorsys.hsv_to_rgb(hue, saturation, value))
-    return palette
+    """Strong vivid tones: high saturation, full brightness."""
+    return [colorsys.hsv_to_rgb(random.random(), random.uniform(0.8, 1.0), random.uniform(0.9, 1.0)) for _ in range(k)]
 
 def random_palette_mono(k=5):
-    """Monochromatic color palette."""
+    """Single hue, multiple brightness levels."""
     base_hue = random.random()
-    palette = []
-    for i in range(k):
-        saturation = random.uniform(0.3, 0.6)
-        value = 0.4 + (i / k) * 0.6
-        palette.append(colorsys.hsv_to_rgb(base_hue, saturation, value))
-    return palette
+    return [colorsys.hsv_to_rgb(base_hue, random.uniform(0.3, 0.6), 0.3 + i / k * 0.7) for i in range(k)]
 
 def random_palette_noisetouch(k=5):
-    """Random, chaotic colors."""
-    return [(random.random(), random.random(), random.random()) for _ in range(k)]
+    """Unpredictable color mixing with random noise."""
+    return [(abs(random.gauss(0.5, 0.3)), abs(random.gauss(0.5, 0.3)), abs(random.gauss(0.5, 0.3))) for _ in range(k)]
 
-# Master function
 def get_palette(style, k=5):
+    """Return color palette by style."""
     if style == "Pastel":
         return random_palette_pastel(k)
     elif style == "Vivid":
@@ -63,7 +46,7 @@ def get_palette(style, k=5):
 # ------------------------------------------
 
 def blob(center=(0.5, 0.5), r=0.3, points=500, wobble=0.15):
-    """Generate coordinates for an irregular closed blob."""
+    """Generate coordinates for a wobbly closed blob."""
     angles = np.linspace(0, 2 * math.pi, points)
     radii = r * (1 + wobble * (np.random.rand(points) - 0.5))
     x = center[0] + radii * np.cos(angles)
@@ -71,67 +54,65 @@ def blob(center=(0.5, 0.5), r=0.3, points=500, wobble=0.15):
     return x, y
 
 def get_lighting_effect_color(color_rgb, blob_center, light_source):
-    """Apply simple lighting: adjust brightness by distance from the light source."""
-    dist = math.sqrt((light_source[0] - blob_center[0])**2 + (light_source[1] - blob_center[1])**2)
+    """Add subtle lighting effect based on distance from the light source."""
+    dist = math.sqrt((light_source[0] - blob_center[0]) ** 2 + (light_source[1] - blob_center[1]) ** 2)
     brightness_factor = 1.0 - (dist * 0.05)
     h, s, v = colorsys.rgb_to_hsv(*color_rgb)
-    new_v = max(0, min(1, v * brightness_factor))
-    return colorsys.hsv_to_rgb(h, s, new_v)
+    v = max(0, min(1, v * brightness_factor))
+    return colorsys.hsv_to_rgb(h, s, v)
 
 def draw_gradient_blob(ax, x, y, base_color, alpha, edge_color):
-    """Draw a soft gradient-filled blob with edge color."""
-    patch = Polygon(np.column_stack([x, y]), facecolor='none', edgecolor=edge_color)
+    """Draw a soft gradient blob."""
+    patch = Polygon(np.column_stack([x, y]), facecolor='none', edgecolor='none')
     ax.add_patch(patch)
-
     h, s, v = colorsys.rgb_to_hsv(*base_color)
-    lighter_color = colorsys.hsv_to_rgb(h, s * 0.2, min(1.0, v * 1.2))
+    lighter = colorsys.hsv_to_rgb(h, s * 0.3, min(1.0, v * 1.25))
 
     gradient = np.linspace(0, 1, 256).reshape(1, -1)
     gradient = np.vstack((gradient, gradient))
     extent = [x.min(), x.max(), y.min(), y.max()]
 
-    cmap = plt.cm.colors.LinearSegmentedColormap.from_list("grad", [base_color, lighter_color])
+    cmap = plt.cm.colors.LinearSegmentedColormap.from_list("grad", [base_color, lighter])
     im = ax.imshow(gradient, aspect='auto', extent=extent, origin='lower', cmap=cmap, alpha=alpha)
     im.set_clip_path(patch)
 
+    # Draw edge if selected
+    if edge_color is not None:
+        ax.plot(x, y, color=edge_color, linewidth=1.5, alpha=0.8)
+
 def draw_blob_with_all_effects(ax, palette, light_source, wobble, edge_color):
-    """Draw one blob with shadow, lighting, and gradient effects."""
+    """Draw one blob with shadow, lighting, and gradient."""
     cx, cy = random.random(), random.random()
-    max_radius = 0.4 - (cy * 0.25)
-    rr = random.uniform(0.1, max_radius)
-    alpha = 0.8 - (cy * 0.4)
+    rr = random.uniform(0.1, 0.4 - cy * 0.25)
+    alpha = 0.85 - (cy * 0.4)
     x, y = blob(center=(cx, cy), r=rr, wobble=wobble)
 
-    # Shadow
-    shadow_layers = 5
-    shadow_offset_step = 0.0015
-    shadow_base_alpha = 0.06
-    for i in range(shadow_layers, 0, -1):
-        offset = i * shadow_offset_step
-        current_alpha = shadow_base_alpha * (i / shadow_layers)
-        shadow_color = (0, 0, 0, current_alpha)
-        ax.fill(x + offset, y - offset, color=shadow_color, edgecolor='none')
+    # Soft shadow
+    for i in range(5, 0, -1):
+        offset = i * 0.0015
+        alpha_shadow = 0.06 * (i / 5)
+        ax.fill(x + offset, y - offset, color=(0, 0, 0, alpha_shadow), edgecolor='none')
 
-    # Lighting + gradient
-    original_color = random.choice(palette)
-    final_color = get_lighting_effect_color(original_color, (cx, cy), light_source)
+    # Color + lighting
+    base = random.choice(palette)
+    final_color = get_lighting_effect_color(base, (cx, cy), light_source)
     draw_gradient_blob(ax, x, y, final_color, alpha, edge_color)
 
 # ------------------------------------------
 # 3. Poster Generator
 # ------------------------------------------
 
-def generate_3d_poster(num_layers=6, num_colors=6, wobble=0.15, light_x=0.1, light_y=0.9,
-                       edge_color="#000000", palette_style="Vivid", seed=None):
-    """Main function to generate the 3D poster."""
-    if seed is not None:
+def generate_3d_poster(num_layers, num_colors, wobble, light_x, light_y,
+                       edge_color, palette_style, seed):
+    """Generate the full 3D generative poster."""
+    if seed != 0:
         random.seed(seed)
         np.random.seed(seed)
 
     light_source = (light_x, light_y)
     fig, ax = plt.subplots(figsize=(7, 10))
     fig.patch.set_facecolor((0.98, 0.98, 0.98))
-    ax.axis('off')
+    ax.axis("off")
 
     palette = get_palette(palette_style, num_colors)
 
@@ -142,7 +123,6 @@ def generate_3d_poster(num_layers=6, num_colors=6, wobble=0.15, light_x=0.1, lig
             transform=ax.transAxes, color='white')
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
-
     return fig
 
 # ------------------------------------------
@@ -150,22 +130,28 @@ def generate_3d_poster(num_layers=6, num_colors=6, wobble=0.15, light_x=0.1, lig
 # ------------------------------------------
 
 st.set_page_config(page_title="3D Generative Poster", layout="wide")
-st.title("✨ 3D Illusion Generative Poster")
-st.write("Create a dynamic poster with **lighting, gradient, and shadow effects** using Streamlit.")
+st.title("✨ Interactive 3D Generative Poster")
+st.write("Generate a poster with **distinct palette styles, lighting, gradient, and shadow effects.**")
 
 # Sidebar controls
-st.sidebar.header("⚙️ Poster Settings")
+st.sidebar.header("🎨 Poster Settings")
 
-palette_style = st.sidebar.selectbox("🎨 Palette Style", ["Pastel", "Vivid", "Mono", "NoiseTouch"])
+palette_style = st.sidebar.selectbox("Palette Style", ["Pastel", "Vivid", "Mono", "NoiseTouch"])
 num_layers = st.sidebar.slider("Number of Layers", 1, 50, 20)
 num_colors = st.sidebar.slider("Palette Size", 2, 15, 6)
 wobble = st.sidebar.slider("Wobble Intensity", 0.01, 1.0, 0.15)
 light_x = st.sidebar.slider("Light Source X", 0.0, 1.0, 0.1)
 light_y = st.sidebar.slider("Light Source Y", 0.0, 1.0, 0.9)
-edge_color = st.sidebar.color_picker("Edge Color", "#000000")
 seed = st.sidebar.number_input("Random Seed", 0, 9999, 0)
 
-# Button
+# Edge color control
+edge_mode = st.sidebar.radio("Edge Mode", ["Use Color", "No Edge"])
+if edge_mode == "Use Color":
+    edge_color = st.sidebar.color_picker("Edge Color", "#FFFFFF")
+else:
+    edge_color = None
+
+# Generate button
 generate = st.button("🎨 Generate Poster")
 
 if generate:
@@ -173,7 +159,7 @@ if generate:
         fig = generate_3d_poster(num_layers, num_colors, wobble, light_x, light_y, edge_color, palette_style, seed)
         st.pyplot(fig)
 
-        # Download button
+        # Download
         buf = io.BytesIO()
         fig.savefig(buf, format="png", dpi=300, bbox_inches="tight")
         buf.seek(0)
@@ -185,4 +171,4 @@ if generate:
         )
 
 st.markdown("---")
-st.caption("Created with Streamlit • Now includes Pastel, Vivid, Mono, and NoiseTouch palettes 🎨")
+st.caption("Created with Streamlit • Includes Pastel, Vivid, Mono, and NoiseTouch palettes 🌈 + optional edge color.")
