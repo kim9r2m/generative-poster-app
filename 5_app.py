@@ -23,7 +23,6 @@ def initialize_palette_csv():
             {"name": "forest", "r": 0.2, "g": 0.6, "b": 0.3}
         ])
         df.to_csv(PALETTE_FILE, index=False)
-        print("✅ Created default palette.csv")
 
 def read_palette():
     if not os.path.exists(PALETTE_FILE):
@@ -74,11 +73,11 @@ def make_palette(k=6, mode="pastel", base_h=0.6):
         cols.append(colorsys.hsv_to_rgb(h, s, v))
     return cols
 
-def draw_single_blob(ax, center, radius, color, alpha, wobble):
+def draw_single_blob(ax, center, radius, color, alpha, wobble, edge_color):
     x, y = blob(center=center, r=radius, wobble=wobble)
-    ax.fill(x, y, color=color, alpha=alpha, edgecolor='none')
+    ax.fill(x, y, color=color, alpha=alpha, edgecolor=edge_color, linewidth=1.5)
 
-def redraw_poster(ax, n_layers, wobble_val, palette_mode, seed_val):
+def redraw_poster(ax, n_layers, wobble_val, palette_mode, seed_val, edge_color):
     random.seed(seed_val)
     np.random.seed(seed_val)
     ax.clear()
@@ -94,7 +93,7 @@ def redraw_poster(ax, n_layers, wobble_val, palette_mode, seed_val):
         rr = random.uniform(0.1, 0.4)
         alpha = random.uniform(0.1, 0.5)
         color = random.choice(palette)
-        draw_single_blob(ax, (cx, cy), rr, color, alpha, wobble_val)
+        draw_single_blob(ax, (cx, cy), rr, color, alpha, wobble_val, edge_color)
 
     ax.text(0.05, 0.95, f"Poster • {palette_mode}", transform=ax.transAxes,
             fontsize=14, weight="bold", color="black")
@@ -105,8 +104,9 @@ def redraw_poster(ax, n_layers, wobble_val, palette_mode, seed_val):
 # 3. Streamlit UI
 # ==========================================
 
-st.set_page_config(page_title="Interactive Generative Poster", layout="wide")
-st.title("🎨 Streamlit Generative Poster (with CSV Palette)")
+st.set_page_config(page_title="Generative Poster Studio", layout="wide")
+st.title("🎨 Generative Poster Studio")
+st.markdown("Generate algorithmic art using CSV palettes or extracted image palettes!")
 
 # Palette management
 st.sidebar.header("🎨 Manage Palette (palette.csv)")
@@ -116,27 +116,33 @@ palette_df = read_palette()
 st.sidebar.write("Current Palette:")
 st.sidebar.dataframe(palette_df, use_container_width=True)
 
-# Add new color
+# --- Show current palette preview ---
+st.subheader("🎨 Current Palette Preview")
+palette_colors = [(r.r, r.g, r.b) for r in palette_df.itertuples()]
+fig, ax = plt.subplots(figsize=(6, 1))
+ax.imshow([palette_colors], extent=[0, len(palette_colors), 0, 1])
+ax.set_xticks([]); ax.set_yticks([])
+ax.axis("off")
+st.pyplot(fig)
+
+# --- Add new color with color picker ---
 with st.sidebar.expander("➕ Add New Color"):
     new_name = st.text_input("Color Name")
-    new_r = st.slider("R (0.0–1.0)", 0.0, 1.0, 0.5)
-    new_g = st.slider("G (0.0–1.0)", 0.0, 1.0, 0.5)
-    new_b = st.slider("B (0.0–1.0)", 0.0, 1.0, 0.5)
+    new_hex = st.color_picker("Pick a Color", "#FFFFFF")
+    rgb = tuple(int(new_hex.lstrip("#")[i:i+2], 16) / 255.0 for i in (0, 2, 4))
     if st.button("Add Color"):
         if new_name:
             if new_name in palette_df["name"].values:
                 st.warning("Color name already exists.")
             else:
-                palette_df = pd.concat([
-                    palette_df,
-                    pd.DataFrame([{"name": new_name, "r": new_r, "g": new_g, "b": new_b}])
-                ], ignore_index=True)
+                new_row = {"name": new_name, "r": rgb[0], "g": rgb[1], "b": rgb[2]}
+                palette_df = pd.concat([palette_df, pd.DataFrame([new_row])], ignore_index=True)
                 save_palette(palette_df)
                 st.success(f"Added color '{new_name}' ✅")
         else:
             st.error("Please provide a color name.")
 
-# Delete color
+# --- Delete color ---
 with st.sidebar.expander("❌ Delete Color"):
     if not palette_df.empty:
         del_name = st.selectbox("Select color to delete", palette_df["name"].tolist())
@@ -152,11 +158,17 @@ with st.sidebar.expander("❌ Delete Color"):
 # ==========================================
 
 st.sidebar.header("⚙️ Poster Settings")
-
 palette_mode = st.sidebar.selectbox("Palette Mode", ["csv", "pastel", "vivid", "mono", "random"])
 n_layers = st.sidebar.slider("Number of Layers", 3, 50, 8)
 wobble_val = st.sidebar.slider("Wobble Intensity", 0.01, 0.5, 0.15)
 seed_val = st.sidebar.number_input("Seed (for randomness)", 0, 9999, 0)
+
+# --- Edge color control ---
+edge_option = st.sidebar.radio("Edge Color Option", ["No Edge", "Custom Color"], horizontal=True)
+edge_color = "none"
+if edge_option == "Custom Color":
+    edge_hex = st.sidebar.color_picker("Pick Edge Color", "#000000")
+    edge_color = tuple(int(edge_hex.lstrip("#")[i:i+2], 16) / 255.0 for i in (0, 2, 4))
 
 # ==========================================
 # Generate Poster
@@ -164,7 +176,7 @@ seed_val = st.sidebar.number_input("Seed (for randomness)", 0, 9999, 0)
 
 if st.button("🎨 Generate Poster"):
     fig, ax = plt.subplots(figsize=(7, 10))
-    redraw_poster(ax, n_layers, wobble_val, palette_mode, seed_val)
+    redraw_poster(ax, n_layers, wobble_val, palette_mode, seed_val, edge_color)
     st.pyplot(fig)
 
     # Download button
@@ -179,4 +191,4 @@ if st.button("🎨 Generate Poster"):
     )
 
 st.markdown("---")
-st.caption("Built with Streamlit • Real-time editable palette (palette.csv) and generative art engine 🎨")
+st.caption("Built with Streamlit • Real-time editable palette, color picker, and generative art engine 🎨")
